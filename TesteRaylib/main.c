@@ -1,14 +1,18 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <raylib.h>
 
 #define GRAVITY 0.3f
 #define WINDOW_HEIGHT 800.0f
 #define WINDOW_WIDTH 1600.0f
 
-
+typedef struct {
+    Rectangle top, left, bottom, right;
+} HitBox;
 
 typedef struct {
-    Rectangle body, bottom, top, right, left;
+    Rectangle body;
+    HitBox hitBox;
     int health;
     float speedX;
     float speedY;
@@ -19,6 +23,8 @@ typedef struct {
     bool rightTouch;
     bool leftTouch;
 } Player;
+
+
 
 Rectangle platforms[] = {
 	{ 0.0f, 700.0f, 400.0f, 100.0f },
@@ -37,6 +43,20 @@ void movePlayer(Player* player, float speed, char axis) {
     }
 }
 
+void updateHitBox(Rectangle* rec, HitBox* hitBox) {
+    hitBox->top.x = rec->x;
+    hitBox->top.y = rec->y;
+
+    hitBox->left.x = rec->x;
+    hitBox->left.y = rec->y;
+
+    hitBox->bottom.x = rec->x;
+    hitBox->bottom.y = rec->y + rec->height - 2.0f;
+
+    hitBox->right.x = rec->x + rec->width - 2.0f;
+    hitBox->right.y = rec->y;
+}
+
 void updatePlayer(Player* player) {
     if (player->speedX != 0) {
         player->body.x += player->speedX;
@@ -44,8 +64,9 @@ void updatePlayer(Player* player) {
 
     player->body.y += player->speedY;
     player->speedY += GRAVITY;
+    updateHitBox(&(player->body), &(player->hitBox));
 
-    player->bottom.x = player->body.x + (player->body.width - player->bottom.width) / 2;
+    /*player->bottom.x = player->body.x + (player->body.width - player->bottom.width) / 2;
     player->bottom.y = player->body.y + player->body.height;
 
     player->top.x = player->body.x + (player->body.width - player->top.width) / 2;
@@ -55,7 +76,7 @@ void updatePlayer(Player* player) {
     player->right.y = player->body.y + (player->body.height - player->right.height) / 2;
 
     player->left.x = player->body.x - player->left.width;
-    player->left.y = player->body.y + (player->body.height - player->left.height)/2;
+    player->left.y = player->body.y + (player->body.height - player->left.height)/2;*/
 
 }
 
@@ -66,27 +87,27 @@ void updateCollisions(Player* player, Rectangle* ground) {
      player->rightTouch = false;
      player->leftTouch = false;
 
-     if (CheckCollisionRecs(player->bottom, *ground)) {
+     if (CheckCollisionRecs(player->hitBox.bottom, *ground)) {
          player->onGround = true;
          player->bottomTouch = true;
          player->body.y = ground->y - player->body.height;
      }
 
      for (int i = 0; i < platformCount; i++) {
-         if (CheckCollisionRecs(player->bottom, platforms[i])) {
+         if (CheckCollisionRecs(player->hitBox.bottom, platforms[i])) {
              player->bottomTouch = true;
              player->onGround = true;
              player->body.y = platforms[i].y - player->body.height;
          }
-         if (CheckCollisionRecs(player->top, platforms[i])) {
+         if (CheckCollisionRecs(player->hitBox.top, platforms[i])) {
              player->topTouch = true;
              //player->body.y = platforms[i].y + platforms[i].height;
          }
-         if (CheckCollisionRecs(player->right, platforms[i])) {
+         if (CheckCollisionRecs(player->hitBox.right, platforms[i])) {
              player->rightTouch = true;
              player->body.x = platforms[i].x - player->body.width;
          }
-         if (CheckCollisionRecs(player->left, platforms[i])) {
+         if (CheckCollisionRecs(player->hitBox.left, platforms[i])) {
              player->leftTouch = true;
              player->body.x = platforms[i].x + platforms[i].width;
          }
@@ -105,6 +126,42 @@ void updateCollisions(Player* player, Rectangle* ground) {
          player->speedX = 0;
      }
 }
+
+HitBox* createRecHitBox(Rectangle* rec) {
+    HitBox *p = (HitBox*) malloc(sizeof(HitBox));
+    if (p != NULL) {
+        *p = (HitBox){
+            {
+                rec->x,
+                rec->y,
+                rec->width,
+                2.0f
+            },
+            {
+                rec->x,
+                rec->y,
+                2.0f,
+                rec->height
+            },
+            {
+                rec->x,
+                rec->y + rec->height - 2.0f,
+                rec->width,
+                2.0f
+            },
+            {
+                rec->x + rec->width - 2.0f,
+                rec->y,
+                2.0f,
+                rec->height,
+            }
+        };
+    }
+
+    return p;
+}
+
+
 
 void jumpPlayer(Player* player, float initialSpeed) {
     player->speedY = initialSpeed;
@@ -126,7 +183,9 @@ int main() {
     player.speedY = 0;
     player.defaultSpeed = 4;
 
-    player.bottom.x = player.body.x + 1.0f;
+    player.hitBox = *createRecHitBox(&(player.body));
+
+    /*player.bottom.x = player.body.x + 1.0f;
     player.bottom.y = player.body.y + player.body.height;
     player.bottom.width = player.body.width - 2.0f;
     player.bottom.height = 3.0f;
@@ -144,7 +203,7 @@ int main() {
     player.left.x = player.body.x;
     player.left.y = player.body.y + 1.0f;
     player.left.width = 3.0f;
-    player.left.height = player.body.height - 2.0f;
+    player.left.height = player.body.height - 2.0f;*/
 
     // RESOLVER O PROBLEMA DE TELEPORTAR EM COLISAO LATERAL / ENTRAR NO CHAO EM COLISAO VERTIVAL DE ALTA VELOCIADE
 
@@ -194,10 +253,10 @@ int main() {
             }
             DrawRectangleRec(player.body, RED);
 
-            DrawRectangleRec(player.bottom, BLACK);
-            DrawRectangleRec(player.top, BLUE);
-            DrawRectangleRec(player.right, PURPLE);
-            DrawRectangleRec(player.left, PINK);
+            DrawRectangleRec(player.hitBox.bottom, BLACK);
+            DrawRectangleRec(player.hitBox.top, BLUE);
+            DrawRectangleRec(player.hitBox.right, PURPLE);
+            DrawRectangleRec(player.hitBox.left, PINK);
 
         EndDrawing();
 
