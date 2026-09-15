@@ -6,6 +6,7 @@
 #define WINDOW_HEIGHT 800.0f
 #define WINDOW_WIDTH 1600.0f
 #define MAX_PLATFORMS 20
+#define DURATION_ON_GROUND_TO_JUMP 0.1
 
 typedef struct {
     Rectangle top, left, bottom, right;
@@ -15,8 +16,10 @@ typedef struct {
     Rectangle body;
     HitBox hitBox;
     int health;
+    //double durationOnGround;
     float speedX;
     float speedY;
+    float maxSpeedY;
     float defaultSpeed;
     float jumpInitialSpeed;
     bool onGround;
@@ -41,9 +44,9 @@ HitBox* createRecHitBox(Rectangle* rec) {
     if (p != NULL) {
         *p = (HitBox){
             {
-                rec->x + 2.0f,
+                rec->x,
                 rec->y,
-                rec->width - 4.0f,
+                rec->width,
                 2.0f
             },
             {
@@ -53,9 +56,9 @@ HitBox* createRecHitBox(Rectangle* rec) {
                 rec->height - 4.0f
             },
             {
-                rec->x + 2.0f,
+                rec->x,
                 rec->y + rec->height - 2.0f,
-                rec->width - 4.0f,
+                rec->width,
                 2.0f
             },
             {
@@ -92,13 +95,13 @@ void addPlatform(int* countPlatforms, Platform** platformsArray, Platform** plat
 // UPDATES
 
 void updateHitBox(Rectangle* rec, HitBox* hitBox) {
-    hitBox->top.x = rec->x + 2.0f;
+    hitBox->top.x = rec->x;
     hitBox->top.y = rec->y;
 
     hitBox->left.x = rec->x;
     hitBox->left.y = rec->y + 2.0f;
 
-    hitBox->bottom.x = rec->x + 2.0f;
+    hitBox->bottom.x = rec->x;
     hitBox->bottom.y = rec->y + rec->height - 2.0f;
 
     hitBox->right.x = rec->x + rec->width - 2.0f;
@@ -110,10 +113,19 @@ void updatePlayer(Player* player) {
     }
 
     player->body.y += player->speedY;
-    if (!player->bottomTouch) {
-        player->speedY += GRAVITY;
+    if (!player->bottomTouch  && player->speedY < player->maxSpeedY) {
+           player->speedY += GRAVITY;
     }
-
+    printf("%f\n", player->speedY);
+    /*
+    if (player->bottomTouch && player->durationOnGround <= DURATION_ON_GROUND_TO_JUMP) {
+        player->durationOnGround += GetFrameTime();
+    } else if(player->durationOnGround > 0) {
+        player->durationOnGround -= GetFrameTime();
+    }
+    //printf("%lf\n", player->durationOnGround);
+    //printf("%df\n", player->bottomTouch);
+    */
     updateHitBox(&(player->body), &(player->hitBox));
 
 }
@@ -133,17 +145,21 @@ void updateCollisions(Player* player, Rectangle* ground, int countPlatforms, Pla
      for (int i = 0; i < countPlatforms; i++) {
          if (CheckCollisionRecs(player->hitBox.bottom, platforms[i]->hitBox.top)) {
              player->bottomTouch = true;
+             player->body.y = platforms[i]->rec.y - player->body.height;
          }
          if (CheckCollisionRecs(player->hitBox.top, platforms[i]->hitBox.bottom)) {
              player->topTouch = true;
          }
          if (CheckCollisionRecs(player->hitBox.right, platforms[i]->hitBox.left)) {
              player->rightTouch = true;
+             player->body.x = platforms[i]->rec.x - player->body.width;
          }
          if (CheckCollisionRecs(player->hitBox.left, platforms[i]->hitBox.right)) {
              player->leftTouch = true;
+             player->body.x = platforms[i]->rec.x + platforms[i]->rec.width;
          }
      }
+     
 
      if (player->bottomTouch) {
          if (player->speedY > 0) {
@@ -151,7 +167,9 @@ void updateCollisions(Player* player, Rectangle* ground, int countPlatforms, Pla
          }
      }
      if (player->topTouch) {
-         player->speedY = GRAVITY;
+         if (player->speedY < 0) {
+            player->speedY = GRAVITY;
+         }
      }
      if (player->leftTouch) {
          player->speedX = 0; 
@@ -210,6 +228,8 @@ int main() {
     player.speedY = 0;
     player.defaultSpeed = 2;
     player.jumpInitialSpeed = 4.0f;
+    player.maxSpeedY = 6;
+    //player.durationOnGround = 0.0;
 
     player.hitBox = *createRecHitBox(&(player.body));
 
@@ -222,7 +242,7 @@ int main() {
     // Platforms
     //                                   x       y       width   height
     Platform platform1 = *createPlatform(100.0f, 600.0f, 150.0f, 40.0f, RED);
-    Platform platform2 = *createPlatform(500.0f, 450.0f, 150.0f, 40.0f, BLUE);
+    Platform platform2 = *createPlatform(500.0f, 450.0f, 150.0f, 300.0f, BLUE);
     Platform platform3 = *createPlatform(900.0f, 500.0f, 150.0f, 40.0f, DARKPURPLE);
 
     addPlatform(&countPlatforms, platforms, &platform1);
@@ -233,7 +253,7 @@ int main() {
 
     while (!WindowShouldClose()) {
         // KEYBOARD
-        if (IsKeyDown(KEY_W) && player.bottomTouch) {
+        if (IsKeyDown(KEY_W) && player.bottomTouch /* && player.durationOnGround >= DURATION_ON_GROUND_TO_JUMP */) {
             jumpPlayer(&player, -player.jumpInitialSpeed);
         }
         if (IsKeyDown(KEY_A)) {
@@ -258,7 +278,6 @@ int main() {
             UpdatePhysics(fixedTimestep, &player, &ground, countPlatforms, platforms);
             accumulatedTime -= fixedTimestep;
         }
-
 
         // DRAWING
         BeginDrawing();
