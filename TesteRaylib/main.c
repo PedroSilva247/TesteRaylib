@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <raylib.h>
 
-#define GRAVITY 0.3f
+#define GRAVITY 0.08f
 #define WINDOW_HEIGHT 800.0f
 #define WINDOW_WIDTH 1600.0f
 #define MAX_PLATFORMS 20
@@ -18,6 +18,7 @@ typedef struct {
     float speedX;
     float speedY;
     float defaultSpeed;
+    float jumpInitialSpeed;
     bool onGround;
     bool bottomTouch;
     bool topTouch;
@@ -34,32 +35,34 @@ typedef struct {
 
 
 HitBox* createRecHitBox(Rectangle* rec) {
+    // top, left, bottom, right
+    // x, y, width, height
     HitBox *p = (HitBox*) malloc(sizeof(HitBox));
     if (p != NULL) {
         *p = (HitBox){
             {
-                rec->x,
+                rec->x + 2.0f,
                 rec->y,
-                rec->width,
+                rec->width - 4.0f,
                 2.0f
             },
             {
                 rec->x,
-                rec->y,
+                rec->y + 2.0f,
                 2.0f,
-                rec->height
+                rec->height - 4.0f
             },
             {
-                rec->x,
+                rec->x + 2.0f,
                 rec->y + rec->height - 2.0f,
-                rec->width,
+                rec->width - 4.0f,
                 2.0f
             },
             {
                 rec->x + rec->width - 2.0f,
-                rec->y,
+                rec->y + 2.0f,
                 2.0f,
-                rec->height,
+                rec->height - 4.0f
             }
         };
     }
@@ -81,7 +84,7 @@ Platform* createPlatform(float x, float y, float width, float height, Color colo
     return p;
 }
 
-void addPlatform(int* countPlatforms, Platform** platformsArray, Platform* platform) {
+void addPlatform(int* countPlatforms, Platform** platformsArray, Platform** platform) {
     platformsArray[*countPlatforms] = platform;
     (*countPlatforms)++;
 }
@@ -89,17 +92,17 @@ void addPlatform(int* countPlatforms, Platform** platformsArray, Platform* platf
 // UPDATES
 
 void updateHitBox(Rectangle* rec, HitBox* hitBox) {
-    hitBox->top.x = rec->x;
+    hitBox->top.x = rec->x + 2.0f;
     hitBox->top.y = rec->y;
 
     hitBox->left.x = rec->x;
-    hitBox->left.y = rec->y;
+    hitBox->left.y = rec->y + 2.0f;
 
-    hitBox->bottom.x = rec->x;
+    hitBox->bottom.x = rec->x + 2.0f;
     hitBox->bottom.y = rec->y + rec->height - 2.0f;
 
     hitBox->right.x = rec->x + rec->width - 2.0f;
-    hitBox->right.y = rec->y;
+    hitBox->right.y = rec->y + 2.0f;
 }
 void updatePlayer(Player* player) {
     if (player->speedX != 0) {
@@ -107,12 +110,14 @@ void updatePlayer(Player* player) {
     }
 
     player->body.y += player->speedY;
-    player->speedY += GRAVITY;
+    if (!player->bottomTouch) {
+        player->speedY += GRAVITY;
+    }
 
     updateHitBox(&(player->body), &(player->hitBox));
 
 }
-void updateCollisions(Player* player, Rectangle* ground) {
+void updateCollisions(Player* player, Rectangle* ground, int countPlatforms, Platform** platforms) {
      player->onGround = false;
      player->bottomTouch = false;
      player->topTouch = false;
@@ -125,31 +130,28 @@ void updateCollisions(Player* player, Rectangle* ground) {
          player->body.y = ground->y - player->body.height;
      }
 
-     //for (int i = 0; i < platformCount; i++) {
-     //    if (CheckCollisionRecs(player->hitBox.bottom, platforms[i])) {
-     //        player->bottomTouch = true;
-     //        player->onGround = true;
-     //        player->body.y = platforms[i].y - player->body.height;
-     //    }
-     //    if (CheckCollisionRecs(player->hitBox.top, platforms[i])) {
-     //        player->topTouch = true;
-     //        //player->body.y = platforms[i].y + platforms[i].height;
-     //    }
-     //    if (CheckCollisionRecs(player->hitBox.right, platforms[i])) {
-     //        player->rightTouch = true;
-     //        player->body.x = platforms[i].x - player->body.width;
-     //    }
-     //    if (CheckCollisionRecs(player->hitBox.left, platforms[i])) {
-     //        player->leftTouch = true;
-     //        player->body.x = platforms[i].x + platforms[i].width;
-     //    }
-     //}
+     for (int i = 0; i < countPlatforms; i++) {
+         if (CheckCollisionRecs(player->hitBox.bottom, platforms[i]->hitBox.top)) {
+             player->bottomTouch = true;
+         }
+         if (CheckCollisionRecs(player->hitBox.top, platforms[i]->hitBox.bottom)) {
+             player->topTouch = true;
+         }
+         if (CheckCollisionRecs(player->hitBox.right, platforms[i]->hitBox.left)) {
+             player->rightTouch = true;
+         }
+         if (CheckCollisionRecs(player->hitBox.left, platforms[i]->hitBox.right)) {
+             player->leftTouch = true;
+         }
+     }
 
      if (player->bottomTouch) {
-         player->speedY = 0;
+         if (player->speedY > 0) {
+            player->speedY = 0;
+         }
      }
      if (player->topTouch) {
-         player->speedY = -GRAVITY;
+         player->speedY = GRAVITY;
      }
      if (player->leftTouch) {
          player->speedX = 0; 
@@ -157,6 +159,14 @@ void updateCollisions(Player* player, Rectangle* ground) {
      if (player->rightTouch) {
          player->speedX = 0;
      }
+}
+
+void UpdatePhysics(float fixedTimestep, Player* player, Rectangle* ground, int countPlatforms, Platform* platforms) {
+    // UPDATES
+    updatePlayer(player);
+
+    // COLLISIONS
+    updateCollisions(player, ground, countPlatforms, platforms);
 }
 
 // ACTIONS
@@ -173,15 +183,21 @@ void jumpPlayer(Player* player, float initialSpeed) {
     player->speedY = initialSpeed;
 }
 
+// TIMESTEP
+    
+float accumulatedTime = 0.0f;
+float fixedTimestep = 1.0 / 240.0;
+
 // MAIN
 
-int main() {
-    int countPlatforms = 0;
-    Platform** platforms = (Platform**)malloc(MAX_PLATFORMS * sizeof(Platform*));
 
+int main() {
     InitWindow((int) WINDOW_WIDTH, (int) WINDOW_HEIGHT, "Jogo 01");
 
-    SetTargetFPS(60);
+    SetTargetFPS(200);
+
+    int countPlatforms = 0;
+    Platform** platforms = (Platform**)malloc(MAX_PLATFORMS * sizeof(Platform*));
 
     Player player;
     player.body.x = 50.0f;
@@ -192,11 +208,10 @@ int main() {
     player.health = 100;
     player.speedX = 0;
     player.speedY = 0;
-    player.defaultSpeed = 4;
+    player.defaultSpeed = 2;
+    player.jumpInitialSpeed = 4.0f;
 
     player.hitBox = *createRecHitBox(&(player.body));
-
-    // RESOLVER O PROBLEMA DE TELEPORTAR EM COLISAO LATERAL / ENTRAR NO CHAO EM COLISAO VERTICAL DE ALTA VELOCIADE
 
 	Rectangle ground;
 	ground.height = 100.0f;
@@ -205,10 +220,10 @@ int main() {
 	ground.y = WINDOW_HEIGHT - ground.height;
 
     // Platforms
-
-    Platform platform1 = *createPlatform(100.0f, 650.0f, 200.0f, 40.0f, RED);
-    Platform platform2 = *createPlatform(500.0f, 650.0f, 200.0f, 40.0f, BLUE);
-    Platform platform3 = *createPlatform(900.0f, 650.0f, 200.0f, 40.0f, DARKPURPLE);
+    //                                   x       y       width   height
+    Platform platform1 = *createPlatform(100.0f, 600.0f, 150.0f, 40.0f, RED);
+    Platform platform2 = *createPlatform(500.0f, 450.0f, 150.0f, 40.0f, BLUE);
+    Platform platform3 = *createPlatform(900.0f, 500.0f, 150.0f, 40.0f, DARKPURPLE);
 
     addPlatform(&countPlatforms, platforms, &platform1);
     addPlatform(&countPlatforms, platforms, &platform2);
@@ -218,8 +233,8 @@ int main() {
 
     while (!WindowShouldClose()) {
         // KEYBOARD
-        if (IsKeyDown(KEY_W) && player.onGround) {
-            jumpPlayer(&player, -8.0f);
+        if (IsKeyDown(KEY_W) && player.bottomTouch) {
+            jumpPlayer(&player, -player.jumpInitialSpeed);
         }
         if (IsKeyDown(KEY_A)) {
             if (!player.leftTouch) {
@@ -234,14 +249,16 @@ int main() {
             player.speedX = 0;
         }
         
+        // UPDATE 
 
-        // UPDATES
-        updatePlayer(&player);
+        float delta = GetFrameTime();
+        accumulatedTime += delta;
 
-        // COLLISIONS
-        updateCollisions(&player, &ground);
-        
-        
+        while (accumulatedTime >= fixedTimestep) {
+            UpdatePhysics(fixedTimestep, &player, &ground, countPlatforms, platforms);
+            accumulatedTime -= fixedTimestep;
+        }
+
 
         // DRAWING
         BeginDrawing();
