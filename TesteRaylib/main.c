@@ -87,7 +87,7 @@ Platform* createPlatform(float x, float y, float width, float height, Color colo
     return p;
 }
 
-void addPlatform(int* countPlatforms, Platform** platformsArray, Platform** platform) {
+void addPlatform(int* countPlatforms, Platform** platformsArray, Platform* platform) {
     platformsArray[*countPlatforms] = platform;
     (*countPlatforms)++;
 }
@@ -116,7 +116,6 @@ void updatePlayer(Player* player) {
     if (!player->bottomTouch  && player->speedY < player->maxSpeedY) {
            player->speedY += GRAVITY;
     }
-    printf("%f\n", player->speedY);
     /*
     if (player->bottomTouch && player->durationOnGround <= DURATION_ON_GROUND_TO_JUMP) {
         player->durationOnGround += GetFrameTime();
@@ -179,7 +178,7 @@ void updateCollisions(Player* player, Rectangle* ground, int countPlatforms, Pla
      }
 }
 
-void UpdatePhysics(float fixedTimestep, Player* player, Rectangle* ground, int countPlatforms, Platform* platforms) {
+void UpdatePhysics(float fixedTimestep, Player* player, Rectangle* ground, int countPlatforms, Platform** platforms) {
     // UPDATES
     updatePlayer(player);
 
@@ -227,7 +226,7 @@ int main() {
     player.speedX = 0;
     player.speedY = 0;
     player.defaultSpeed = 2;
-    player.jumpInitialSpeed = 4.0f;
+    player.jumpInitialSpeed = 5.0f;
     player.maxSpeedY = 6;
     //player.durationOnGround = 0.0;
 
@@ -258,15 +257,37 @@ int main() {
         }
         if (IsKeyDown(KEY_A)) {
             if (!player.leftTouch) {
-                player.speedX = -(player.defaultSpeed);
+                if (player.bottomTouch) {
+                    player.speedX = -(player.defaultSpeed);
+                } else {
+                    if (-player.speedX < player.defaultSpeed) {
+                        player.speedX += -(player.defaultSpeed) / 15;
+                    } else {
+                        player.speedX = -(player.defaultSpeed);
+                    }
+                }
             }
         } else if (IsKeyDown(KEY_D)) {
             if (!player.rightTouch) {
-                player.speedX = player.defaultSpeed;
+                if (player.bottomTouch) {
+                    player.speedX = player.defaultSpeed;
+                } else {
+                    if (player.speedX < player.defaultSpeed) {
+                        player.speedX += player.defaultSpeed / 15;
+                    } else {
+                        player.speedX = player.defaultSpeed;
+                    }
+                }
             }
-        }
-        else {
+        } else if (player.bottomTouch) {
             player.speedX = 0;
+        }
+
+        if (IsKeyUp(KEY_A) && !player.bottomTouch && player.speedX < 0) {
+            player.speedX *= 0.95;
+        }
+        if (IsKeyUp(KEY_D) && !player.bottomTouch && player.speedX > 0) {
+            player.speedX *= 0.95;
         }
         
         // UPDATE 
